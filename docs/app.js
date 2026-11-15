@@ -21,7 +21,12 @@ const svgPaths = {
 const icon = (name, size = 20, extra = '') => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${svgPaths[name]}</svg>`;
 const html = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const capitalize = (value) => value[0].toUpperCase() + value.slice(1);
-const cover = (theme) => new URL(`./assets/${theme === 'blanco' ? 'blanco' : 'tinto'}.webp`, import.meta.url).href;
+function winePhoto(theme, scene = '') {
+  const color = theme === 'blanco' ? 'blanco' : 'tinto';
+  return new URL(`./assets/${color}${scene ? '-' + scene : ''}.webp`, import.meta.url).href;
+}
+const wineScenes = ['servir', 'remolino', 'copa-en-mano', 'dos-copas', 'reflejos', 'decantador'];
+const cupPhoto = (theme, index) => winePhoto(theme, wineScenes[index % wineScenes.length]);
 const roomsOrigin = location.hostname === 'jegomei.github.io'
   ? document.querySelector('meta[name="catapp-rooms-origin"]').content
   : location.origin;
@@ -128,8 +133,9 @@ function historyCard(item) {
   const wineCount = item.wines.length;
   const stages = { lobby: 'En sala', voting: 'En curso', revealing: 'En revelado', revealed: 'Finalizada' };
   const status = example ? 'Ejemplo' : stages[item.stage];
+  const image = example ? winePhoto(item.theme, 'decantador') : cupPhoto(item.theme, parseInt(item.id.slice(-4), 16));
   return `<a class="history-card" href="${href}">
-    <span class="history-thumb ${item.theme}"><img src="${cover(item.theme)}" alt=""></span>
+    <span class="history-thumb ${item.theme}"><img src="${image}" alt="" loading="lazy"></span>
     <span class="history-info">
       <span class="history-title">${html(item.title)}</span>
       <span class="history-meta">${peopleMeta(item.size)}<span class="meta-divider"></span><span>${icon('wine', 15)} ${wineCount} vinos</span></span>
@@ -142,7 +148,7 @@ function home() {
   const isWhite = mode === 'blanco';
   return `<div class="content home">
     <section class="hero">
-      <div class="hero-art"><img src="${cover(mode)}" alt="Copa de vino ${mode}"></div>
+      <div class="hero-art"><img src="${winePhoto(mode)}" alt="Copa de vino ${mode}"></div>
       <div class="hero-content">
         <div class="eyebrow"><span class="hairline"></span> CATAS ENTRE AMIGOS</div>
         <h1>Catas<br><em>a ciegas.</em></h1>
@@ -256,7 +262,7 @@ function voting() {
   return `<div class="content narrow page voting">
     <div class="voting-top">${backLink('#inicio', 'Inicio')}<button data-action="review" type="button" class="text-button">${icon('book', 17)} Revisar elecciones</button></div>
     ${progress(total, round, true)}
-    <div class="round-banner" style="--photo:url('${cover(room.theme)}')">
+    <div class="round-banner" style="--photo:url('${cupPhoto(room.theme, round)}')">
       <div><span class="eyebrow">COPA ${String(round + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}</span><h1>Vino ${round + 1}</h1></div>
     </div>
     <section class="panel vote-panel">
@@ -341,8 +347,9 @@ function results() {
   const total = room.wines.length;
   if (slide === total) return ranking();
   const known = slide < room.order.length;
+  const photo = cupPhoto(room.theme, slide + (known ? 3 : 1));
   return `<div class="content story-wrap">
-    <section class="story" aria-roledescription="revelado por copas" style="--photo:url('${cover(room.theme)}')">
+    <section class="story" aria-roledescription="revelado por copas" style="--photo:url('${photo}')">
       <div class="story-top">
         ${progress(total + 1, slide)}
         <div><span>${html(room.title)}</span><a href="#historial" class="icon-button" aria-label="Cerrar revelado">${icon('close', 21)}</a></div>

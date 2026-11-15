@@ -179,7 +179,7 @@ textarea { min-height: 105px; resize: vertical; }
 .segments > span.done, .segments > button.done::after { background: var(--tone); }
 .segments > span.active, .segments > button.active::after { background: var(--accent); }
 .round-banner { min-height: 168px; display: flex; align-items: end; border-radius: 15px; border: 1px solid var(--hero-border); margin: 9px 0 13px; padding: 18px; overflow: hidden; background:
-  linear-gradient(90deg, var(--hero-wash) 20%, var(--hero-fade) 88%),
+  linear-gradient(90deg, var(--hero-wash) 42%, var(--hero-fade) 72%, transparent),
   var(--photo) right 38% / 58% auto no-repeat, var(--hero); }
 .round-banner h1 { font-size: 58px; }
 .round-banner .eyebrow { margin-bottom: 6px; }
