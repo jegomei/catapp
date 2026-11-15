@@ -10,7 +10,7 @@ if (pagesOrigin && (new URL(pagesOrigin).protocol !== 'https:' || new URL(pagesO
 }
 
 const mime = { html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8',
-  js: 'text/javascript; charset=utf-8', webp: 'image/webp', svg: 'image/svg+xml' };
+  js: 'text/javascript; charset=utf-8', jpg: 'image/jpeg', webp: 'image/webp', svg: 'image/svg+xml' };
 const assets = {};
 if (!pagesOrigin) {
   for (const directory of ['docs', 'docs/assets']) {
