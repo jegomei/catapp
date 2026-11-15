@@ -117,6 +117,9 @@ main[aria-busy] { cursor: progress; }
 .section-heading a, .text-button, .back-link { font-size: 13px; color: var(--accent); display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
 .section-heading a:hover, .text-button:hover:not(:disabled), .back-link:hover { text-decoration: underline; text-underline-offset: 4px; }
 .history-list { display: grid; gap: 10px; }
+.history-actions { margin-bottom: 14px; }
+.import-error:empty { display: none; }
+.import-error { color: var(--accent); font-size: 13px; }
 .history-card { background: var(--panel); border: 1px solid var(--line-subtle); border-radius: 16px; padding: 11px 16px 11px 11px; display: grid; grid-template-columns: 65px minmax(0, 1fr) auto; gap: 17px; align-items: center; transition: background .18s, border-color .18s; }
 .history-card:hover { background: var(--panel-hover); border-color: var(--line); }
 .history-thumb { height: 65px; border-radius: 11px; overflow: hidden; background: var(--tone); }

@@ -1,4 +1,4 @@
-export function rankedPeople(room) {
+function rankedPeople(room) {
   return room.people.map(person => ({ id: person.id, name: person.name, score: person.correct.filter(Boolean).length }))
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'es'));
 }
@@ -28,6 +28,50 @@ export function resultText(report) {
     '', 'Vinos catados',
     ...report.wines.map((wine, index) => `${index + 1}. ${wine}`),
   ].join('\n');
+}
+
+const months = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+export function parseResultText(text) {
+  const invalid = () => new Error('Pega el texto completo de Compartir resultados, incluida la lista de vinos.');
+  const [title, category, details, heading, ...rows] = text.split(/\r\n?|\n/).map(line => line.trim()).filter(Boolean);
+  const theme = /^Cata de (tinto|blanco)$/.exec(category)?.[1];
+  const wineHeading = rows.indexOf('Vinos catados');
+  if (!title || title.length > 70 || !theme || heading !== 'Clasificación' || wineHeading < 2 || wineHeading > 10) {
+    throw invalid();
+  }
+
+  const dateMatch = /^(\d{1,2}) de ([a-z]+) de (\d{4})(?:\s*·\s*(.+))?$/i.exec(details);
+  if (!dateMatch) throw invalid();
+  const [, day, monthName, year, place = ''] = dateMatch;
+  const month = months.indexOf(monthName.toLowerCase()) + 1;
+  const calendarDay = `${year}-${String(month).padStart(2, '0')}-${day.padStart(2, '0')}`;
+  const date = new Date(calendarDay + 'T12:00:00Z');
+  if (Number.isNaN(date.getTime()) || !date.toISOString().startsWith(calendarDay) || place.length > 90) throw invalid();
+
+  const wineRows = rows.slice(wineHeading + 1);
+  if (wineRows.length < 2 || wineRows.length > 12) throw invalid();
+  const wines = wineRows.map((row, index) => {
+    const line = /^(\d{1,2})\.\s+(.{1,90})$/u.exec(row);
+    if (!line || Number(line[1]) !== index + 1) throw invalid();
+    return line[2];
+  });
+  const people = rows.slice(0, wineHeading).map(row => {
+    const score = /^(.{1,32})\s+[—–-]\s+(\d{1,2})\s*\/\s*(\d{1,2})\s+aciertos?$/u.exec(row);
+    if (!score || Number(score[3]) !== wines.length || Number(score[2]) > wines.length) throw invalid();
+    return { name: score[1].trim(), score: Number(score[2]) };
+  }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'es'));
+
+  return {
+    created: date.toISOString(),
+    report: {
+      title, category, theme, location: place.trim(), wines, people,
+      date: new Intl.DateTimeFormat('es', { dateStyle: 'long', timeZone: 'UTC' }).format(date),
+    },
+  };
 }
 
 const palettes = {

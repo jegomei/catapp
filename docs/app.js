@@ -1,4 +1,4 @@
-import { rankedPeople, resultImage, resultReport, resultText } from './share-card.js';
+import { parseResultText, resultImage, resultReport, resultText } from './share-card.js?v=importar';
 
 const svgPaths = {
   wine: '<path d="M8 22h8m-4-7v7M7 2h10l1.3 6.1A5.7 5.7 0 0 1 12.7 15h-1.4a5.7 5.7 0 0 1-5.6-6.9L7 2Zm-1 7h12"/>',
@@ -38,8 +38,10 @@ function read(key, fallback) {
   catch { return fallback; }
 }
 function save(key, value) {
-  try { localStorage.setItem('catapp:' + key, JSON.stringify(value)); }
-  catch { /* The current page remains usable when device storage is unavailable. */ }
+  try {
+    localStorage.setItem('catapp:' + key, JSON.stringify(value));
+    return true;
+  } catch { return false; }
 }
 
 const shell = document.querySelector('#shell');
@@ -132,16 +134,17 @@ function displayRooms(includeSample = true) {
 
 function historyCard(item) {
   const example = item.id === 'ejemplo';
-  const href = example ? '#ejemplo' : '#cata/' + item.id;
-  const wineCount = item.wines.length;
+  const href = example ? '#ejemplo' : (item.report ? '#importada/' : '#cata/') + item.id;
+  const { title, theme, wines } = item.report ?? item;
+  const participantCount = item.report?.people.length ?? item.size;
   const stages = { lobby: 'En sala', voting: 'En curso', revealing: 'En revelado', revealed: 'Finalizada' };
-  const status = example ? 'Ejemplo' : stages[item.stage];
-  const image = example ? winePhoto(item.theme, 'decantador') : cupPhoto(item.theme, parseInt(item.id.slice(-4), 16));
+  const status = example ? 'Ejemplo' : item.report ? 'Importada' : stages[item.stage];
+  const image = example ? winePhoto(theme, 'decantador') : cupPhoto(theme, parseInt(item.id.slice(-4), 16));
   return `<a class="history-card" href="${href}">
-    <span class="history-thumb ${item.theme}"><img src="${image}" alt="" loading="lazy"></span>
+    <span class="history-thumb ${theme}"><img src="${image}" alt="" loading="lazy"></span>
     <span class="history-info">
-      <span class="history-title">${html(item.title)}</span>
-      <span class="history-meta">${peopleMeta(item.size)}<span class="meta-divider"></span><span>${icon('wine', 15)} ${wineCount} vinos</span></span>
+      <span class="history-title">${html(title)}</span>
+      <span class="history-meta">${peopleMeta(participantCount)}<span class="meta-divider"></span><span>${icon('wine', 15)} ${wines.length} vinos</span></span>
       ${example ? '' : `<span class="history-date">${dateShort(item.created)}</span>`}
     </span>
     <span class="history-end">${pill(status, 'status-pill')}${icon('chevron', 19)}</span>
@@ -171,10 +174,50 @@ function home() {
 }
 function historyPage() {
   return `<div class="content narrow page">${backLink('#inicio', 'Inicio')}
-    <div class="page-intro"><h1>Historial de catas</h1><p>Consulta las catas que has creado o jugado en este navegador.</p></div>
+    <div class="page-intro"><h1>Historial de catas</h1><p>Consulta las catas guardadas en este navegador.</p></div>
+    <div class="history-actions">${button('Importar cata', 'import-results', 'plus', 'secondary')}</div>
     <div class="history-list">${displayRooms().map(historyCard).join('')}</div>
     <div class="page-actions">${button('Nueva cata', 'new', 'plus', 'primary')}</div>
   </div>`;
+}
+function importPage() {
+  return `<div class="content narrow page">
+    ${backLink('#historial', 'Historial')}
+    ${roomHeading('', 'Importar cata', 'Pega el texto de los resultados que te hayan compartido.')}
+    <form id="import-form" class="panel form-fields">
+      <label>Texto de los resultados<textarea id="import-text" name="results" rows="8" maxlength="8000" required></textarea></label>
+      <p class="import-error" id="import-error" role="alert"></p>
+      <button type="submit" class="button primary wide">${icon('plus', 18)} Añadir al historial</button>
+    </form>
+  </div>`;
+}
+function findImported(id) {
+  return displayRooms(false).find(item => item.report && item.id === id);
+}
+function importTasting(form) {
+  const input = form.querySelector('textarea');
+  const error = form.querySelector('#import-error');
+  try {
+    const { created, report } = parseResultText(input.value);
+    const history = displayRooms(false);
+    const sameResults = resultText({ ...report, location: '' });
+    const existing = history.find(item => item.report && resultText({ ...item.report, location: '' }) === sameResults);
+    if (existing) {
+      go('#importada/' + existing.id);
+      announce('Esta cata ya está en tu historial.');
+      return;
+    }
+    const item = { id: 'texto-' + newId(), created, report };
+    const nextHistory = [item, ...history].sort((a, b) => b.created.localeCompare(a.created));
+    if (!save('history', nextHistory)) throw new Error('No se pudo guardar la cata en este navegador.');
+    go('#importada/' + item.id);
+    announce('Cata añadida al historial.');
+  } catch (failure) {
+    error.textContent = failure.message;
+    input.setAttribute('aria-invalid', 'true');
+    input.setAttribute('aria-describedby', 'import-error');
+    input.focus();
+  }
 }
 function createPage() {
   return `<div class="content narrow page">
@@ -349,7 +392,7 @@ function revealedWine() {
 }
 function results() {
   const total = room.wines.length;
-  if (slide === total) return ranking();
+  if (slide === total) return ranking(room);
   const known = slide < room.order.length;
   const photo = cupPhoto(room.theme, slide + (known ? 3 : 1));
   return `<div class="content story-wrap">
@@ -376,29 +419,41 @@ function results() {
     </section>
   </div>`;
 }
-function ranking() {
-  const entries = rankedPeople(room);
-  const total = room.order.length;
+function reportFor(tasting) {
+  return tasting.report ?? resultReport(tasting, tasting.location ?? '');
+}
+function ranking(tasting) {
+  const report = reportFor(tasting);
+  const imported = !!tasting.report;
+  const entries = report.people;
+  const total = report.wines.length;
+  const details = [report.date, report.location].filter(Boolean).map(html).join(' · ');
   return `<div class="content narrow page">
     ${backLink('#historial', 'Historial')}
     <div class="status-intro"><span class="status-icon">${icon('trophy', 29)}</span>
-    ${roomHeading('RESULTADOS', 'Clasificación', html(room.title))}</div>
+    ${roomHeading(imported ? 'CATA IMPORTADA' : 'RESULTADOS', 'Clasificación', html(report.title) + (imported ? '<br>' + details : ''))}</div>
     <ol class="panel ranking">
       ${entries.map((person, index) => {
         const position = entries.findIndex(entry => entry.score === person.score) + 1;
         return `<li class="${index === 0 ? 'first' : ''}">
           <span class="round-number">${position}</span>
-          <span class="rank-name">${html(person.name)}${person.id === room.me ? ' <small>(tú)</small>' : ''}</span>
+          <span class="rank-name">${html(person.name)}${tasting.me && person.id === tasting.me ? ' <small>(tú)</small>' : ''}</span>
           <span class="score" aria-label="${person.score} de ${total} aciertos">
             <span class="score-icons">${Array.from({ length: person.score }, () => icon('glass', 15)).join('')}</span> <strong>${person.score}/${total}</strong>
           </span>
         </li>`;
       }).join('')}
     </ol>
+    ${imported ? `<section class="panel">
+      <div class="panel-heading"><h2>Vinos catados</h2></div>
+      <ol class="review-list">${report.wines.map((wine, index) => `<li class="saved-note">
+        <span class="round-number">${index + 1}</span><strong>${html(wine)}</strong>
+      </li>`).join('')}</ol>
+    </section>` : ''}
     <div class="page-actions stacked">
-      ${button('Volver al revelado', 'restart-story', 'wine', 'primary wide')}
-      ${button('Compartir resultados', 'share-results', 'share', 'secondary wide')}
-      ${room.myBallot ? button('Ver mis notas', 'read-notes', 'lock', 'secondary wide') : ''}
+      ${imported ? '' : button('Volver al revelado', 'restart-story', 'wine', 'primary wide')}
+      ${button('Compartir resultados', 'share-results', 'share', imported ? 'primary wide' : 'secondary wide')}
+      ${tasting.myBallot ? button('Ver mis notas', 'read-notes', 'lock', 'secondary wide') : ''}
     </div>
   </div>`;
 }
@@ -424,13 +479,22 @@ function roomPage() {
 }
 function render({ focus = '', scroll = false } = {}) {
   shell.querySelector('.results-dialog[open]')?.close();
-  const [page] = routes();
+  const [page, id] = routes();
   const inRoom = page === 'cata' || page === 'ejemplo';
-  const theme = inRoom && room ? room.theme : page === 'nueva' ? form.theme : mode;
+  const imported = page === 'importada' ? findImported(id) : null;
+  const theme = imported?.report.theme ?? (inRoom && room ? room.theme : page === 'nueva' ? form.theme : mode);
   setTheme(theme);
   const immersive = inRoom && Array.isArray(room?.order) && slide < room.wines.length && !subview;
-  const section = inRoom ? roomPage() : page === 'nueva' ? createPage() : page === 'historial' ? historyPage() : home();
-  shell.innerHTML = `${immersive ? '' : renderHeader(theme, inRoom)}<main id="main">${section}</main>
+  let section;
+  if (inRoom) section = roomPage();
+  else if (page === 'importar') section = importPage();
+  else if (page === 'importada') section = imported ? ranking(imported)
+    : `<div class="content narrow page">${backLink('#historial', 'Historial')}
+        ${roomHeading('', 'Cata no encontrada', 'Puedes volver a importarla pegando el texto compartido.')}</div>`;
+  else if (page === 'nueva') section = createPage();
+  else if (page === 'historial') section = historyPage();
+  else section = home();
+  shell.innerHTML = `${immersive ? '' : renderHeader(theme, inRoom || !!imported || page === 'importar')}<main id="main">${section}</main>
     ${immersive ? '' : '<footer class="footer"><span>Catapp</span><span>Catas a ciegas entre amigos</span></footer>'}`;
   if (scroll) top();
   if (focus) moveFocus(focus);
@@ -580,8 +644,9 @@ function showSlide(position) {
   render({ scroll: true, focus: 'h1' });
 }
 function showResultsDialog(tasting) {
+  const summary = reportFor(tasting);
   const locationKey = 'results-location:' + tasting.id;
-  const place = read(locationKey, tasting.location ?? '');
+  const place = read(locationKey, summary.location);
   shell.insertAdjacentHTML('beforeend', `<dialog class="results-dialog" aria-labelledby="share-results-title">
     <div class="panel-heading"><h2 id="share-results-title">Compartir resultados</h2>
       <button type="button" class="icon-button" aria-label="Cerrar" autofocus>${icon('close', 20)}</button>
@@ -617,7 +682,7 @@ function showResultsDialog(tasting) {
   let generation = 0;
 
   function updateResults() {
-    const report = resultReport(tasting, locationInput.value);
+    const report = { ...summary, location: locationInput.value.trim() };
     textPreview.value = resultText(report);
     imageButton.disabled = true;
     imageButton.textContent = 'Preparando imagen…';
@@ -626,7 +691,7 @@ function showResultsDialog(tasting) {
     clearTimeout(timer);
     timer = setTimeout(async () => {
       try {
-        const blob = await resultImage(report, winePhoto(tasting.theme, 'dos-copas'));
+        const blob = await resultImage(report, winePhoto(report.theme, 'dos-copas'));
         if (!dialog.open || !dialog.isConnected || generation !== update) return;
         if (imageUrl) URL.revokeObjectURL(imageUrl);
         imageUrl = URL.createObjectURL(blob);
@@ -649,7 +714,7 @@ function showResultsDialog(tasting) {
     }, 180);
   }
 
-  const canShareText = !!navigator.share && navigator.canShare?.({ text: tasting.title }) !== false;
+  const canShareText = !!navigator.share && navigator.canShare?.({ text: summary.title }) !== false;
   textButton.textContent = canShareText ? 'Compartir texto' : 'Copiar texto';
   textButton.addEventListener('click', async () => {
     if (canShareText) {
@@ -711,6 +776,7 @@ shell.addEventListener('click', async event => {
       render({ focus: `[data-action="theme"][data-value="${mode}"]` });
       break;
     case 'new': form = makeForm(); go('#nueva'); break;
+    case 'import-results': go('#importar'); break;
     case 'demo': await create(true); break;
     case 'retry': await route(); break;
     case 'add-wine':
@@ -737,7 +803,7 @@ shell.addEventListener('click', async event => {
     case 'slide-next': showSlide(slide + 1); break;
     case 'slide-back': showSlide(slide - 1); break;
     case 'restart-story': showSlide(0); break;
-    case 'share-results': showResultsDialog(room); break;
+    case 'share-results': showResultsDialog(room ?? findImported(routes()[1])); break;
     case 'read-notes': subview = 'notes'; render({ scroll: true, focus: 'h1' }); break;
     case 'close-notes': subview = ''; render({ scroll: true, focus: 'h1' }); break;
   }
@@ -752,9 +818,15 @@ shell.addEventListener('input', event => {
     draft.notes[round] = input.value;
     persistDraft();
   }
+  if (input.id === 'import-text' && input.hasAttribute('aria-invalid')) {
+    input.removeAttribute('aria-invalid');
+    input.removeAttribute('aria-describedby');
+    input.form.querySelector('#import-error').textContent = '';
+  }
 });
 shell.addEventListener('submit', async event => {
   event.preventDefault();
+  if (event.target.id === 'import-form') importTasting(event.target);
   if (event.target.id === 'create-form') await create(false);
   if (event.target.id === 'join-form') await changeRoom('join', { name: new FormData(event.target).get('name') });
   if (event.target.id === 'reveal-form') {
