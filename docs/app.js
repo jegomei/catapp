@@ -50,7 +50,6 @@ let slide = 0;
 let pending = false;
 let loadError = '';
 let notified;
-let pour = null;
 let demoId = '';
 let pollInProgress = false;
 
@@ -127,7 +126,8 @@ function historyCard(item) {
   const example = item.id === 'ejemplo';
   const href = example ? '#ejemplo' : '#cata/' + item.id;
   const wineCount = item.wines.length;
-  const status = example ? 'Ejemplo' : item.stage === 'revealed' ? 'Finalizada' : item.stage === 'lobby' ? 'En sala' : 'En curso';
+  const stages = { lobby: 'En sala', voting: 'En curso', revealing: 'En revelado', revealed: 'Finalizada' };
+  const status = example ? 'Ejemplo' : stages[item.stage];
   return `<a class="history-card" href="${href}">
     <span class="history-thumb ${item.theme}"><img src="${cover(item.theme)}" alt=""></span>
     <span class="history-info">
@@ -217,14 +217,13 @@ function lobby() {
     ${backLink('#inicio', 'Inicio')}
     ${roomHeading(room.demo ? 'CATA DE DEMOSTRACIÓN' : 'SALA DE ESPERA', room.title, room.demo
       ? 'Hay cinco invitados simulados. Votarán cuando envíes tus elecciones.'
-      : room.host ? 'Comparte el enlace. Tus amigos solo tienen que escribir su nombre para unirse.' : 'La cata empezará cuando el anfitrión dé paso a la primera copa.')}
+      : room.host ? 'Comparte el enlace. Numerad las botellas tapadas y dejad las etiquetas para el final.' : 'La cata empezará cuando el anfitrión dé paso a la primera copa.')}
     ${!room.demo ? `<div class="panel invite-panel"><div><span>Código de la sala</span><strong>${room.id.toUpperCase()}</strong></div>${button('Compartir enlace', 'share', 'link', 'secondary')}</div>` : ''}
     <section class="panel">
       <div class="panel-heading"><h2>Participantes</h2>${pill(`${room.people.length} / ${room.size}`, full ? 'success-pill' : '')}</div>
       ${roster(false)}
     </section>
     ${room.host ? `<div class="page-actions stacked">
-      ${!room.demo ? button('Ver orden de servicio', 'pour', 'lock', 'secondary wide') : ''}
       <button type="button" class="button primary wide" data-action="start" ${full ? '' : 'disabled'}>Empezar cata a ciegas ${icon('arrow', 18)}</button>
     </div>` : ''}
   </div>`;
@@ -247,7 +246,7 @@ function persistDraft() { save('draft:' + room.id, draft); }
 function wineName(id) { return html(room.wines.find(wine => wine.id === id)?.label ?? 'Sin asignar'); }
 function pickedCount() { return draft.choices.filter(choice => choice !== null).length; }
 function progress(total, position, actions = false) {
-  return `<div class="segments" aria-label="Copa ${position + 1} de ${total}">${Array.from({ length: total }, (_, i) => actions
+  return `<div class="segments" aria-label="${actions ? 'Copa' : 'Tarjeta'} ${position + 1} de ${total}">${Array.from({ length: total }, (_, i) => actions
     ? `<button type="button" class="${i === position ? 'active' : draft.choices[i] !== null ? 'done' : ''}" data-action="round" data-value="${i}" aria-label="Copa ${i + 1}" ${i === position ? 'aria-current="step"' : ''}></button>`
     : `<span class="${i === position ? 'active' : i < position ? 'done' : ''}"></span>`).join('')}</div>`;
 }
@@ -310,7 +309,7 @@ function waiting() {
     ${backLink('#inicio', 'Inicio')}
     <div class="status-intro"><span class="status-icon">${icon(all ? 'sparkle' : 'check', 29)}</span>
     ${roomHeading('', all ? 'Todo listo para revelar' : 'Votos enviados', all
-      ? room.host ? 'Todas las personas han votado. Ya podéis descubrir el orden.' : 'Ya están todos los votos. El anfitrión dará paso al revelado.'
+      ? room.host ? 'Todas las personas han votado. Destapad las etiquetas copa a copa para ver quién acertó.' : 'Ya están todos los votos. El anfitrión dará paso al revelado.'
       : 'La cata se resolverá cuando todos hayan enviado sus votos.')}</div>
     <section class="panel"><div class="panel-heading"><h2>Votación</h2>${pill(`${votes} / ${room.size}`, all ? 'success-pill' : '')}</div>
       ${roster(true)}
@@ -319,32 +318,49 @@ function waiting() {
   </div>`;
 }
 
-function results() {
-  const total = room.order.length;
-  if (slide === total) return ranking();
+function revealQuestion() {
+  if (!room.host) return `<h1>Copa ${slide + 1}</h1><p>Esperando a que el anfitrión revele el vino.</p>`;
+
+  const remaining = room.wines.filter(wine => !room.order.includes(wine.id));
+  return `<h1 id="reveal-question">¿Qué vino había en la copa ${slide + 1}?</h1>
+    <form id="reveal-form">
+      <select name="wine" aria-labelledby="reveal-question" required>
+        <option value="">Elige el vino</option>
+        ${remaining.map(wine => `<option value="${wine.id}">${html(wine.label)}</option>`).join('')}
+      </select>
+    </form>`;
+}
+function revealedWine() {
   const correct = room.people.filter(person => person.correct[slide]);
+  return `<h1>${wineName(room.order[slide])}</h1>
+    <div class="correct"><h2>${correct.length === 1 ? '1 acierto' : `${correct.length} aciertos`}</h2>
+      <div class="correct-names">${correct.length ? correct.map(person => pill(`${icon('check', 13)} ${html(person.name)}`)).join('') : '<span>Nadie ha acertado esta copa.</span>'}</div>
+    </div>`;
+}
+function results() {
+  const total = room.wines.length;
+  if (slide === total) return ranking();
+  const known = slide < room.order.length;
   return `<div class="content story-wrap">
     <section class="story" aria-roledescription="revelado por copas" style="--photo:url('${cover(room.theme)}')">
       <div class="story-top">
         ${progress(total + 1, slide)}
         <div><span>${html(room.title)}</span><a href="#historial" class="icon-button" aria-label="Cerrar revelado">${icon('close', 21)}</a></div>
       </div>
-      <div class="story-body" tabindex="0" aria-label="Toca a la izquierda para retroceder y a la derecha para avanzar">
-        <div class="story-zones">
+      <div class="story-body" ${known ? 'tabindex="0" aria-label="Toca a la izquierda para retroceder y a la derecha para avanzar"' : ''}>
+        ${known ? `<div class="story-zones">
           <button type="button" data-action="slide-back" aria-label="Copa anterior" ${slide === 0 ? 'disabled' : ''} tabindex="-1"></button>
           <button type="button" data-action="slide-next" aria-label="Copa siguiente" tabindex="-1"></button>
-        </div>
-        <div class="story-copy">
+        </div>` : ''}
+        <div class="story-copy ${known ? '' : 'story-question'}">
           <div class="eyebrow"><span class="hairline"></span> COPA ${String(slide + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}</div>
-          <h1>${wineName(room.order[slide])}</h1>
-          <div class="correct"><h2>${correct.length === 1 ? '1 acierto' : `${correct.length} aciertos`}</h2>
-            <div class="correct-names">${correct.length ? correct.map(person => pill(`${icon('check', 13)} ${html(person.name)}`)).join('') : '<span>Nadie ha acertado esta copa.</span>'}</div>
-          </div>
+          ${known ? revealedWine() : revealQuestion()}
         </div>
       </div>
       <div class="story-bottom">
         ${slide ? button('Anterior', 'slide-back', 'back', 'secondary story-button') : '<span></span>'}
-        <button class="button primary" type="button" data-action="slide-next">${slide === total - 1 ? 'Ver clasificación' : 'Siguiente copa'} ${icon('arrow', 18)}</button>
+        ${known ? `<button class="button primary" type="button" data-action="slide-next">${slide === total - 1 ? 'Ver clasificación' : 'Siguiente copa'} ${icon('arrow', 18)}</button>`
+          : room.host ? `<button class="button primary" type="submit" form="reveal-form">Ver quién acertó ${icon('arrow', 18)}</button>` : ''}
       </div>
     </section>
   </div>`;
@@ -402,24 +418,16 @@ function roomPage() {
   </div>`;
   if (!room.me && room.id !== 'ejemplo') return joinPage();
   if (room.stage === 'lobby') return lobby();
-  if (room.stage === 'revealed') return subview === 'notes' ? notesPage() : results();
+  if (Array.isArray(room.order)) return subview === 'notes' ? notesPage() : results();
   if (room.myBallot) return waiting();
   return subview === 'review' ? review() : voting();
 }
-function pourDialog() {
-  return `<dialog id="pour-dialog" class="panel"><div class="panel-heading"><h2>Orden de servicio</h2><button class="icon-button" aria-label="Cerrar" data-action="close-pour">${icon('close', 20)}</button></div>
-    <p>Si también vas a jugar, pide a otra persona que mire el orden y numere las botellas tapadas.</p>
-    ${pour ? `<ol class="review-list">${pour.map((id, index) => `<li class="saved-note"><span class="round-number">${index + 1}</span>${wineName(id)}</li>`).join('')}</ol>`
-    : button('Mostrar orden', 'show-pour', 'lock', 'primary wide')}
-  </dialog>`;
-}
-
 function render({ focus = '', scroll = false } = {}) {
   const [page] = routes();
   const inRoom = page === 'cata' || page === 'ejemplo';
   const theme = inRoom && room ? room.theme : page === 'nueva' ? form.theme : mode;
   setTheme(theme);
-  const immersive = inRoom && room?.stage === 'revealed' && slide < room.order?.length && !subview;
+  const immersive = inRoom && Array.isArray(room?.order) && slide < room.wines.length && !subview;
   const section = inRoom ? roomPage() : page === 'nueva' ? createPage() : page === 'historial' ? historyPage() : home();
   shell.innerHTML = `${immersive ? '' : renderHeader(theme, inRoom)}<main id="main">${section}</main>
     ${immersive ? '' : '<footer class="footer"><span>Catapp</span><span>Catas a ciegas entre amigos</span></footer>'}`;
@@ -443,6 +451,7 @@ async function api(id, method = 'GET', action = '', body = {}) {
 }
 function applyRoom(data) {
   const changedStage = room && room.stage !== data.stage;
+  if (!room && data.host && data.stage === 'revealing') slide = Math.max(0, data.order.length - 1);
   room = data;
   if (data.wines && !draft) {
     draft = blankDraft(data.id, data.wines.length);
@@ -470,20 +479,20 @@ async function route() {
 }
 async function refresh(silent = true, initial = false) {
   const id = activeId;
-  if (!id || (silent && (pending || pollInProgress || document.hidden || document.querySelector('dialog[open]')))) return;
+  if (!id || (silent && (pending || pollInProgress || document.hidden))) return;
   if (silent && room && (room.stage === 'revealed' || (room.stage === 'voting' && room.me && !room.myBallot))) return;
+  const current = room;
   pollInProgress = true;
   try {
     const next = await api(id);
-    if (id !== activeId || (silent && pending) || JSON.stringify(next) === JSON.stringify(room)) return;
+    if (id !== activeId || (silent && (pending || room !== current)) || JSON.stringify(next) === JSON.stringify(room)) return;
     const stageChanged = room && next.stage !== room.stage;
+    const cupRevealed = room?.order?.[slide] === undefined && next.order?.[slide] !== undefined;
     if (silent && !stageChanged && !room?.me && document.activeElement?.matches('#join-form input')) return;
     applyRoom(next);
     loadError = '';
-    if (!document.querySelector('dialog[open]')) {
-      const focused = document.activeElement?.getAttribute('data-action');
-      render({ scroll: initial || stageChanged, focus: stageChanged ? 'h1' : focused ? `[data-action="${focused}"]` : '' });
-    }
+    const focused = document.activeElement?.getAttribute('data-action');
+    render({ scroll: initial || stageChanged, focus: stageChanged || cupRevealed ? 'h1' : focused ? `[data-action="${focused}"]` : '' });
   } catch (error) {
     if (id !== activeId) return;
     if (!silent) {
@@ -548,12 +557,6 @@ async function share() {
     window.prompt('Copia el enlace de la cata', url.href);
   }
 }
-function showDialog() {
-  shell.insertAdjacentHTML('beforeend', pourDialog());
-  const dialog = document.querySelector('#pour-dialog');
-  dialog.addEventListener('close', () => { dialog.remove(); pour = null; });
-  dialog.showModal();
-}
 function pick(value) {
   const previous = draft.choices.indexOf(value);
   if (previous === round) return;
@@ -607,18 +610,6 @@ shell.addEventListener('click', async event => {
       break;
     case 'share': await share(); break;
     case 'start': await changeRoom('start'); break;
-    case 'pour': showDialog(); break;
-    case 'close-pour': document.querySelector('#pour-dialog')?.close(); break;
-    case 'show-pour':
-      try {
-        const dialog = document.querySelector('#pour-dialog');
-        const response = await api(room.id, 'POST', 'pour');
-        if (!dialog?.open) break;
-        pour = response.order;
-        dialog.innerHTML = new DOMParser().parseFromString(pourDialog(), 'text/html').querySelector('dialog').innerHTML;
-        moveFocus('#pour-dialog h2');
-      } catch (error) { announce(error.message); }
-      break;
     case 'round': showRound(Number(value)); break;
     case 'pick': pick(Number(value)); break;
     case 'previous': showRound(round - 1); break;
@@ -653,9 +644,13 @@ shell.addEventListener('submit', async event => {
   event.preventDefault();
   if (event.target.id === 'create-form') await create(false);
   if (event.target.id === 'join-form') await changeRoom('join', { name: new FormData(event.target).get('name') });
+  if (event.target.id === 'reveal-form') {
+    const wine = new FormData(event.target).get('wine');
+    if (wine) await changeRoom('reveal-wine', { position: slide, wine: Number(wine) });
+  }
 });
 window.addEventListener('keydown', event => {
-  if (!document.querySelector('.story') || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (!document.querySelector('.story') || event.target.matches?.('select') || event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
     event.preventDefault();
     showSlide(slide + (event.key === 'ArrowRight' ? 1 : -1));

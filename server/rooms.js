@@ -50,17 +50,17 @@ function publicRoom(room, viewer) {
   if (!own) return base;
 
   const host = own.id === room.people[0].id;
-  const revealed = room.stage === 'revealed';
+  const order = room.stage === 'revealing' || room.stage === 'revealed' ? room.order : null;
   return {
     ...base,
     me: own.id, host, myBallot: own.ballot, wines: room.wines,
     people: room.people.map(person => ({
       id: person.id, name: person.name, sample: person.sample, voted: !!person.ballot,
-      ...(revealed ? {
-        correct: room.order.map((wine, index) => person.ballot[index] === wine),
+      ...(order ? {
+        correct: order.map((wine, index) => person.ballot[index] === wine),
       } : {}),
     })),
-    ...(revealed ? { order: room.order } : {}),
+    ...(order ? { order } : {}),
   };
 }
 
@@ -82,7 +82,6 @@ async function createRoom(db, id, viewer, body) {
   requireValue(new Set(names.map(wine => wine.toLocaleLowerCase('es'))).size === names.length, 'Cada vino necesita un nombre distinto.');
 
   const wines = names.map((label, index) => ({ id: index, label }));
-  const order = shuffled(wines.map(wine => wine.id));
   const people = [member(name, viewer)];
   if (demo) {
     const guests = ['Lucía', 'Mateo', 'Inés', 'Pablo', 'Clara', 'Julia', 'Hugo', 'Vera', 'Diego']
@@ -92,7 +91,7 @@ async function createRoom(db, id, viewer, body) {
   }
 
   const room = {
-    id, title, theme: body.theme, size, wines: shuffled(wines), order, people,
+    id, title, theme: body.theme, size, wines: shuffled(wines), people,
     demo, created: new Date().toISOString(), stage: 'lobby',
   };
   const result = await db.prepare('INSERT OR IGNORE INTO rooms (id, data) VALUES (?, ?)')
@@ -105,15 +104,8 @@ async function createRoom(db, id, viewer, body) {
 }
 
 function sampleBallots(room) {
-  room.people.slice(1).forEach((person, index) => {
-    const ballot = [...room.order];
-    const count = Math.min(ballot.length, index + 2);
-    const targets = shuffled(ballot.map((_, i) => i)).slice(0, count);
-    targets.forEach((position, i) => {
-      ballot[position] = room.order[targets[(i + 1) % count]];
-    });
-    person.ballot = ballot;
-  });
+  const wineIds = room.wines.map(wine => wine.id);
+  for (const person of room.people.slice(1)) person.ballot = shuffled(wineIds);
 }
 
 function mutate(room, viewer, action, body) {
@@ -155,9 +147,27 @@ function mutate(room, viewer, action, body) {
 
   if (action === 'reveal') {
     requireValue(host, 'Solo quien organiza puede revelar la cata.', 403);
-    if (room.stage === 'revealed') return false;
+    if (room.stage === 'revealing' || room.stage === 'revealed') return false;
     requireValue(room.stage === 'voting' && room.people.every(person => person.ballot), 'Todavía faltan votos.', 409);
-    room.stage = 'revealed';
+    room.order = [];
+    room.stage = 'revealing';
+    return true;
+  }
+
+  if (action === 'reveal-wine') {
+    requireValue(host, 'Solo quien organiza puede registrar el vino de la copa.', 403);
+    const { position, wine } = body;
+    requireValue(Number.isInteger(position) && position >= 0 && position < room.wines.length,
+      'Esa copa no es válida.');
+    requireValue(room.wines.some(candidate => candidate.id === wine), 'Elige un vino de la cata.');
+    requireValue(room.stage === 'revealing' || room.stage === 'revealed', 'El revelado aún no ha comenzado.', 409);
+    if (room.order[position] === wine) return false;
+    requireValue(room.stage === 'revealing' && position === room.order.length,
+      'Solo se puede registrar la siguiente copa pendiente.', 409);
+    requireValue(!room.order.includes(wine), 'Ese vino ya se reveló en otra copa.', 409);
+
+    room.order.push(wine);
+    if (room.order.length === room.wines.length) room.stage = 'revealed';
     return true;
   }
 
@@ -185,12 +195,6 @@ export async function roomsAPI(request, db, pathname) {
     requireValue(body && typeof body === 'object' && !Array.isArray(body), 'El formulario no es válido.');
 
     if (action === 'create') return json(await createRoom(db, id, viewer, body), 201);
-    if (action === 'pour') {
-      const { room } = await loadRoom(db, id);
-      requireValue(room.people[0].token === viewer && room.stage === 'lobby' && !room.demo,
-        'El orden está disponible para quien organiza, antes de iniciar la cata.', 403);
-      return json({ order: room.order });
-    }
 
     for (let attempt = 0; attempt < 8; attempt++) {
       const { revision, room } = await loadRoom(db, id);
