@@ -162,7 +162,7 @@ function home() {
 }
 function historyPage() {
   return `<div class="content narrow page">${backLink('#inicio', 'Inicio')}
-    <div class="page-intro"><h1>Historial de catas</h1><p>Vuelve a una sala abierta o repasa los resultados de una cata.</p></div>
+    <div class="page-intro"><h1>Historial de catas</h1><p>Consulta las catas que has creado o jugado en este navegador.</p></div>
     <div class="history-list">${displayRooms().map(historyCard).join('')}</div>
     <div class="page-actions">${button('Nueva cata', 'new', 'plus', 'primary')}</div>
   </div>`;
@@ -170,7 +170,7 @@ function historyPage() {
 function createPage() {
   return `<div class="content narrow page">
     ${backLink('#inicio', 'Inicio')}
-    <div class="page-intro"><h1>Nueva cata</h1><p>Añade los vinos que se van a servir.</p></div>
+    <div class="page-intro"><h1>Nueva cata</h1><p>Añade los vinos y crea una sala sin registrarte.</p></div>
     <form id="create-form" class="flow-form">
       <section class="panel">
         <h2>Vinos</h2>
@@ -217,7 +217,7 @@ function lobby() {
     ${backLink('#inicio', 'Inicio')}
     ${roomHeading(room.demo ? 'CATA DE DEMOSTRACIÓN' : 'SALA DE ESPERA', room.title, room.demo
       ? 'Hay cinco invitados simulados. Votarán cuando envíes tus elecciones.'
-      : room.host ? 'Comparte la invitación y empieza cuando estéis todos.' : 'La cata empezará cuando el anfitrión dé paso a la primera copa.')}
+      : room.host ? 'Comparte el enlace. Tus amigos solo tienen que escribir su nombre para unirse.' : 'La cata empezará cuando el anfitrión dé paso a la primera copa.')}
     ${!room.demo ? `<div class="panel invite-panel"><div><span>Código de la sala</span><strong>${room.id.toUpperCase()}</strong></div>${button('Compartir enlace', 'share', 'link', 'secondary')}</div>` : ''}
     <section class="panel">
       <div class="panel-heading"><h2>Participantes</h2>${pill(`${room.people.length} / ${room.size}`, full ? 'success-pill' : '')}</div>
