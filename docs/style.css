@@ -214,6 +214,21 @@ textarea { min-height: 105px; resize: vertical; }
 .score { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--accent); }
 .score-icons { display: flex; flex-wrap: wrap; justify-content: end; max-width: 106px; }
 .score-icons svg { margin-right: -2px; }
+.results-dialog { width: min(520px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 17px; overflow: hidden; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 19px; }
+.results-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.results-dialog::backdrop { background: #160d14bb; }
+.results-dialog .panel-heading { margin-bottom: 10px; }
+.share-results-body { overflow-y: auto; display: grid; gap: 10px; padding: 4px 4px 10px; }
+.share-place { display: grid; gap: 4px; font-size: 13px; font-weight: 700; }
+.share-results-body summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 700; }
+.share-results-body textarea { margin-top: 5px; font-size: 14px; }
+.share-preview { margin: 0; padding: 8px; border-radius: 12px; background: var(--field); border: 1px solid var(--line-subtle); }
+.share-preview img { width: auto; height: auto; max-width: 100%; max-height: min(46dvh, 430px); margin-inline: auto; object-fit: contain; border-radius: 7px; }
+.share-preview img[hidden] { display: none; }
+.share-preview p { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+.share-results-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+.share-results-actions .button { white-space: normal; padding-inline: 8px; }
+.share-status:not(:empty) { margin-top: 7px; color: var(--muted); font-size: 13px; }
 .story-wrap { max-width: 480px; padding: 16px; }
 .story { --story-ink: #fff7ee; --story-accent: #f1b0c0; --story-shadow: #1b0a119e; isolation: isolate; position: relative; min-height: min(850px, calc(100dvh - 32px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--hero-border); border-radius: 23px; color: var(--story-ink); background: #230f18; }
 [data-theme="blanco"] .story { --story-accent: #ffe0a0; --story-shadow: #31220daa; background: #3a2a16; }

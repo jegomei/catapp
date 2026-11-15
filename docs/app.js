@@ -1,3 +1,5 @@
+import { rankedPeople, resultImage, resultReport, resultText } from './share-card.js';
+
 const svgPaths = {
   wine: '<path d="M8 22h8m-4-7v7M7 2h10l1.3 6.1A5.7 5.7 0 0 1 12.7 15h-1.4a5.7 5.7 0 0 1-5.6-6.9L7 2Zm-1 7h12"/>',
   glass: '<path d="M7 2h10l1.3 6.1A5.7 5.7 0 0 1 12.7 15h-1.4a5.7 5.7 0 0 1-5.6-6.9L7 2Zm5 13v7m-4 0h8"/><path d="M6.2 9h11.6a5.7 5.7 0 0 1-5.1 5.3h-1.4A5.7 5.7 0 0 1 6.2 9Z" fill="currentColor" stroke="none"/>',
@@ -16,7 +18,7 @@ const svgPaths = {
   sparkle: '<path d="M12 2c.8 6 4 9.2 10 10-6 .8-9.2 4-10 10-.8-6-4-9.2-10-10 6-.8 9.2-4 10-10Z"/>',
   trophy: '<path d="M8 21h8m-4-5v5M7 3h10v8a5 5 0 0 1-10 0V3ZM7 5H3v2a4 4 0 0 0 4 4m10-6h4v2a4 4 0 0 1-4 4"/>',
   flask: '<path d="M9 3h6m-5 0v7l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3m-6 12h8"/>',
-  download: '<path d="M12 3v12m-5-5 5 5 5-5m-13 8v3h16v-3"/>',
+  share: '<path d="M12 15V3m-4 4 4-4 4 4M6 10H4v10h16V10h-2"/>',
 };
 const icon = (name, size = 20, extra = '') => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${svgPaths[name]}</svg>`;
 const html = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -59,10 +61,11 @@ let demoId = '';
 let pollInProgress = false;
 
 function makeForm() {
-  return { id: '', theme: mode, title: '', name: read('name', ''), size: 6, wines: ['', ''] };
+  return { id: '', theme: mode, title: '', location: '', name: read('name', ''), size: 6, wines: ['', ''] };
 }
 const sample = {
   id: 'ejemplo', title: 'Entre amigos y entre copas', theme: 'tinto', size: 6, stage: 'revealed', demo: true,
+  location: 'Logroño',
   created: '2026-10-24T12:00:00Z', wines: ['Viña Ardanza', 'Muga Reserva', 'Emilio Moro', 'La Montesa', 'Pétalos del Bierzo', 'Juan Gil Etiqueta Plata'].map((label, id) => ({ id, label })),
   order: [3, 0, 5, 2, 1, 4],
   people: [
@@ -190,6 +193,7 @@ function createPage() {
       <section class="panel form-fields">
         <h2>Detalles de la cata</h2>
         <label>Nombre de la cata<input name="title" placeholder="La cata del sábado" maxlength="70" value="${html(form.title)}" required></label>
+        <label>Lugar de la cata (opcional)<input name="location" placeholder="Ciudad o local" maxlength="90" value="${html(form.location)}"></label>
         <label>Tu nombre<input name="name" autocomplete="nickname" placeholder="Tu nombre" maxlength="32" value="${html(form.name)}" required></label>
         <label>Participantes, incluyéndote<select name="size">${Array.from({ length: 9 }, (_, i) => i + 2).map(number => `<option ${form.size === number ? 'selected' : ''}>${number}</option>`).join('')}</select></label>
       </section>
@@ -372,19 +376,8 @@ function results() {
     </section>
   </div>`;
 }
-function freezeReport() {
-  return {
-    cata: room.title, tipo: room.theme, fecha: room.created,
-    orden: room.order.map((id, index) => ({
-      copa: index + 1,
-      vino: room.wines.find(wine => wine.id === id).label,
-      aciertos: room.people.filter(person => person.correct[index]).map(person => person.name),
-    })),
-  };
-}
 function ranking() {
-  const entries = room.people.map(person => ({ ...person, score: person.correct.filter(Boolean).length }))
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'es'));
+  const entries = rankedPeople(room);
   const total = room.order.length;
   return `<div class="content narrow page">
     ${backLink('#historial', 'Historial')}
@@ -404,7 +397,7 @@ function ranking() {
     </ol>
     <div class="page-actions stacked">
       ${button('Volver al revelado', 'restart-story', 'wine', 'primary wide')}
-      ${button('Descargar resultados', 'export', 'download', 'secondary wide')}
+      ${button('Compartir resultados', 'share-results', 'share', 'secondary wide')}
       ${room.myBallot ? button('Ver mis notas', 'read-notes', 'lock', 'secondary wide') : ''}
     </div>
   </div>`;
@@ -430,6 +423,7 @@ function roomPage() {
   return subview === 'review' ? review() : voting();
 }
 function render({ focus = '', scroll = false } = {}) {
+  shell.querySelector('.results-dialog[open]')?.close();
   const [page] = routes();
   const inRoom = page === 'cata' || page === 'ejemplo';
   const theme = inRoom && room ? room.theme : page === 'nueva' ? form.theme : mode;
@@ -585,11 +579,123 @@ function showSlide(position) {
   slide = position;
   render({ scroll: true, focus: 'h1' });
 }
-function exportResults() {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(freezeReport(), null, 2)], { type: 'application/json' }));
-  const link = Object.assign(document.createElement('a'), { href: url, download: `catapp-${room.id}.json` });
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
+function showResultsDialog(tasting) {
+  const locationKey = 'results-location:' + tasting.id;
+  const place = read(locationKey, tasting.location ?? '');
+  shell.insertAdjacentHTML('beforeend', `<dialog class="results-dialog" aria-labelledby="share-results-title">
+    <div class="panel-heading"><h2 id="share-results-title">Compartir resultados</h2>
+      <button type="button" class="icon-button" aria-label="Cerrar" autofocus>${icon('close', 20)}</button>
+    </div>
+    <div class="share-results-body">
+      <label class="share-place">Lugar de la cata<input placeholder="Ciudad o local" maxlength="90" value="${html(place)}"></label>
+      <details><summary>Ver texto</summary><textarea readonly rows="6" aria-label="Texto de los resultados"></textarea></details>
+      <figure class="share-preview">
+        <p>Preparando la imagen…</p>
+        <img alt="Tarjeta de la cata con fecha, lugar, vinos y clasificación" hidden>
+      </figure>
+    </div>
+    <div class="share-results-actions">
+      <button type="button" class="button secondary" id="share-result-text"></button>
+      <button type="button" class="button primary" id="share-result-image" disabled>Preparando imagen…</button>
+    </div>
+    <p class="share-status" role="status"></p>
+  </dialog>`);
+
+  const dialog = shell.querySelector('.results-dialog');
+  const locationInput = dialog.querySelector('input');
+  const textPreview = dialog.querySelector('textarea');
+  const imagePreview = dialog.querySelector('img');
+  const imageMessage = dialog.querySelector('figure p');
+  const textButton = dialog.querySelector('#share-result-text');
+  const imageButton = dialog.querySelector('#share-result-image');
+  const status = dialog.querySelector('.share-status');
+  const filename = `catapp-${tasting.id}.png`;
+  let imageUrl = '';
+  let file = null;
+  let canShareImage = false;
+  let timer;
+  let generation = 0;
+
+  function updateResults() {
+    const report = resultReport(tasting, locationInput.value);
+    textPreview.value = resultText(report);
+    imageButton.disabled = true;
+    imageButton.textContent = 'Preparando imagen…';
+    status.textContent = '';
+    const update = ++generation;
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const blob = await resultImage(report, winePhoto(tasting.theme, 'dos-copas'));
+        if (!dialog.open || !dialog.isConnected || generation !== update) return;
+        if (imageUrl) URL.revokeObjectURL(imageUrl);
+        imageUrl = URL.createObjectURL(blob);
+        file = new File([blob], filename, { type: 'image/png' });
+        canShareImage = !!navigator.canShare?.({ files: [file] }) && !!navigator.share;
+        imagePreview.src = imageUrl;
+        imagePreview.hidden = false;
+        imageMessage.hidden = true;
+        imageButton.textContent = canShareImage ? 'Compartir imagen' : 'Guardar imagen';
+        imageButton.disabled = false;
+      } catch {
+        if (!dialog.open || generation !== update) return;
+        imagePreview.hidden = true;
+        imageMessage.hidden = false;
+        imageMessage.textContent = 'No se pudo crear la imagen.';
+        imageButton.textContent = 'Reintentar imagen';
+        imageButton.disabled = false;
+        file = null;
+      }
+    }, 180);
+  }
+
+  const canShareText = !!navigator.share && navigator.canShare?.({ text: tasting.title }) !== false;
+  textButton.textContent = canShareText ? 'Compartir texto' : 'Copiar texto';
+  textButton.addEventListener('click', async () => {
+    if (canShareText) {
+      try {
+        await navigator.share({ text: textPreview.value });
+        return;
+      } catch (error) { if (error.name === 'AbortError') return; }
+    }
+    try {
+      await navigator.clipboard.writeText(textPreview.value);
+      status.textContent = 'Texto copiado.';
+    } catch {
+      dialog.querySelector('details').open = true;
+      textPreview.focus();
+      textPreview.select();
+      status.textContent = 'Selecciona Copiar para llevarte el texto.';
+    }
+  });
+  imageButton.addEventListener('click', async () => {
+    if (!file) { updateResults(); return; }
+    if (canShareImage) {
+      try {
+        await navigator.share({ files: [file] });
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        canShareImage = false;
+        imageButton.textContent = 'Guardar imagen';
+        status.textContent = 'Guarda la imagen para adjuntarla desde otra aplicación.';
+      }
+      return;
+    }
+    const link = Object.assign(document.createElement('a'), { href: imageUrl, download: filename });
+    link.click();
+  });
+  locationInput.addEventListener('input', () => {
+    save(locationKey, locationInput.value.trim());
+    updateResults();
+  });
+  dialog.querySelector('.icon-button').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => {
+    clearTimeout(timer);
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    dialog.remove();
+  }, { once: true });
+  dialog.showModal();
+  updateResults();
 }
 
 shell.addEventListener('click', async event => {
@@ -631,7 +737,7 @@ shell.addEventListener('click', async event => {
     case 'slide-next': showSlide(slide + 1); break;
     case 'slide-back': showSlide(slide - 1); break;
     case 'restart-story': showSlide(0); break;
-    case 'export': exportResults(); break;
+    case 'share-results': showResultsDialog(room); break;
     case 'read-notes': subview = 'notes'; render({ scroll: true, focus: 'h1' }); break;
     case 'close-notes': subview = ''; render({ scroll: true, focus: 'h1' }); break;
   }

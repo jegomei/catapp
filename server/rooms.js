@@ -53,6 +53,7 @@ function publicRoom(room, viewer) {
   const order = room.stage === 'revealing' || room.stage === 'revealed' ? room.order : null;
   return {
     ...base,
+    location: room.location ?? '', startedAt: room.startedAt ?? null,
     me: own.id, host, myBallot: own.ballot, wines: room.wines,
     people: room.people.map(person => ({
       id: person.id, name: person.name, sample: person.sample, voted: !!person.ballot,
@@ -91,7 +92,7 @@ async function createRoom(db, id, viewer, body) {
   }
 
   const room = {
-    id, title, theme: body.theme, size, wines: shuffled(wines), people,
+    id, title, location: clean(body.location, 90), theme: body.theme, size, wines: shuffled(wines), people,
     demo, created: new Date().toISOString(), stage: 'lobby',
   };
   const result = await db.prepare('INSERT OR IGNORE INTO rooms (id, data) VALUES (?, ?)')
@@ -129,6 +130,7 @@ function mutate(room, viewer, action, body) {
     requireValue(host, 'Solo quien organiza puede iniciar la cata.', 403);
     if (room.stage !== 'lobby') return false;
     requireValue(room.people.length === room.size, 'Todavía faltan participantes.', 409);
+    room.startedAt = new Date().toISOString();
     room.stage = 'voting';
     return true;
   }
