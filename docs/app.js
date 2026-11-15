@@ -17,7 +17,6 @@ const svgPaths = {
   edit: '<path d="m16 3 5 5M4 20l4.5-1 12-12a2.8 2.8 0 0 0-4-4l-12 12L4 20Z"/>',
   sparkle: '<path d="M12 2c.8 6 4 9.2 10 10-6 .8-9.2 4-10 10-.8-6-4-9.2-10-10 6-.8 9.2-4 10-10Z"/>',
   trophy: '<path d="M8 21h8m-4-5v5M7 3h10v8a5 5 0 0 1-10 0V3ZM7 5H3v2a4 4 0 0 0 4 4m10-6h4v2a4 4 0 0 1-4 4"/>',
-  flask: '<path d="M9 3h6m-5 0v7l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3m-6 12h8"/>',
   share: '<path d="M12 15V3m-4 4 4-4 4 4M6 10H4v10h16V10h-2"/>',
 };
 const icon = (name, size = 20, extra = '') => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${svgPaths[name]}</svg>`;
@@ -59,26 +58,11 @@ let slide = 0;
 let pending = false;
 let loadError = '';
 let notified;
-let demoId = '';
 let pollInProgress = false;
 
 function makeForm() {
   return { id: '', theme: mode, title: '', location: '', name: read('name', ''), size: 6, wines: ['', ''] };
 }
-const sample = {
-  id: 'ejemplo', title: 'Entre amigos y entre copas', theme: 'tinto', size: 6, stage: 'revealed', demo: true,
-  location: 'Logroño',
-  created: '2026-10-24T12:00:00Z', wines: ['Viña Ardanza', 'Muga Reserva', 'Emilio Moro', 'La Montesa', 'Pétalos del Bierzo', 'Juan Gil Etiqueta Plata'].map((label, id) => ({ id, label })),
-  order: [3, 0, 5, 2, 1, 4],
-  people: [
-    ['Lucía', [true, true, false, true, true, true]],
-    ['Mateo', [true, true, true, false, false, true]],
-    ['Inés', [false, true, false, true, false, true]],
-    ['Pablo', [true, false, false, false, true, false]],
-    ['Clara', [false, false, true, false, false, true]],
-    ['Álex', [false, true, false, false, false, false]],
-  ].map(([name, correct], id) => ({ id, name, correct })),
-};
 const routes = () => location.hash.slice(1).split('/');
 function go(hash) {
   if (location.hash === hash) route();
@@ -127,31 +111,30 @@ function peopleMeta(number) { return `<span>${icon('users', 15)} ${number} parti
 function dateShort(date) {
   return new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(date));
 }
-function displayRooms(includeSample = true) {
-  const saved = read('history', []);
-  return includeSample ? [...saved, sample] : saved;
+function displayRooms() {
+  return read('history', []).filter(item => !item.demo);
 }
 
 function historyCard(item) {
-  const example = item.id === 'ejemplo';
-  const href = example ? '#ejemplo' : (item.report ? '#importada/' : '#cata/') + item.id;
+  const href = (item.report ? '#importada/' : '#cata/') + item.id;
   const { title, theme, wines } = item.report ?? item;
   const participantCount = item.report?.people.length ?? item.size;
   const stages = { lobby: 'En sala', voting: 'En curso', revealing: 'En revelado', revealed: 'Finalizada' };
-  const status = example ? 'Ejemplo' : item.report ? 'Importada' : stages[item.stage];
-  const image = example ? winePhoto(theme, 'decantador') : cupPhoto(theme, parseInt(item.id.slice(-4), 16));
+  const status = item.report ? 'Importada' : stages[item.stage];
+  const image = cupPhoto(theme, parseInt(item.id.slice(-4), 16));
   return `<a class="history-card" href="${href}">
     <span class="history-thumb ${theme}"><img src="${image}" alt="" loading="lazy"></span>
     <span class="history-info">
       <span class="history-title">${html(title)}</span>
       <span class="history-meta">${peopleMeta(participantCount)}<span class="meta-divider"></span><span>${icon('wine', 15)} ${wines.length} vinos</span></span>
-      ${example ? '' : `<span class="history-date">${dateShort(item.created)}</span>`}
+      <span class="history-date">${dateShort(item.created)}</span>
     </span>
     <span class="history-end">${pill(status, 'status-pill')}${icon('chevron', 19)}</span>
   </a>`;
 }
 function home() {
   const isWhite = mode === 'blanco';
+  const recent = displayRooms().slice(0, 3);
   return `<div class="content home">
     <section class="hero">
       <div class="hero-art"><img src="${winePhoto(mode)}" alt="Copa de vino ${mode}"></div>
@@ -161,22 +144,22 @@ function home() {
         <p>Sirve el vino, pon a prueba tu paladar y descubre quién reconoce más copas.</p>
         <div class="hero-actions">
           ${button('Nueva cata', 'new', 'plus', 'primary')}
-          ${button('Probar una demo', 'demo', 'flask', 'secondary')}
         </div>
       </div>
       <span class="photo-caption"><i></i> VINO ${isWhite ? 'BLANCO' : 'TINTO'}</span>
     </section>
-    <section class="tastings" aria-labelledby="recent">
+    ${recent.length ? `<section class="tastings" aria-labelledby="recent">
       <div class="section-heading"><h2 id="recent">Tus catas</h2><a href="#historial">Ver historial ${icon('arrow', 16)}</a></div>
-      <div class="history-list">${displayRooms().slice(0, 3).map(historyCard).join('')}</div>
-    </section>
+      <div class="history-list">${recent.map(historyCard).join('')}</div>
+    </section>` : ''}
   </div>`;
 }
 function historyPage() {
+  const history = displayRooms();
   return `<div class="content narrow page">${backLink('#inicio', 'Inicio')}
-    <div class="page-intro"><h1>Historial de catas</h1><p>Consulta las catas guardadas en este navegador.</p></div>
+    <div class="page-intro"><h1>Historial de catas</h1><p>${history.length ? 'Consulta las catas guardadas en este navegador.' : 'Todavía no tienes catas guardadas.'}</p></div>
     <div class="history-actions">${button('Importar cata', 'import-results', 'plus', 'secondary')}</div>
-    <div class="history-list">${displayRooms().map(historyCard).join('')}</div>
+    ${history.length ? `<div class="history-list">${history.map(historyCard).join('')}</div>` : ''}
     <div class="page-actions">${button('Nueva cata', 'new', 'plus', 'primary')}</div>
   </div>`;
 }
@@ -192,14 +175,14 @@ function importPage() {
   </div>`;
 }
 function findImported(id) {
-  return displayRooms(false).find(item => item.report && item.id === id);
+  return displayRooms().find(item => item.report && item.id === id);
 }
 function importTasting(form) {
   const input = form.querySelector('textarea');
   const error = form.querySelector('#import-error');
   try {
     const { created, report } = parseResultText(input.value);
-    const history = displayRooms(false);
+    const history = displayRooms();
     const sameResults = resultText({ ...report, location: '' });
     const existing = history.find(item => item.report && resultText({ ...item.report, location: '' }) === sameResults);
     if (existing) {
@@ -257,7 +240,7 @@ function roster(displayVotes) {
   </ul>`;
 }
 function joinPage() {
-  const canJoin = !room.demo && room.stage === 'lobby' && room.memberCount < room.size;
+  const canJoin = room.stage === 'lobby' && room.memberCount < room.size;
   return `<div class="content narrow page">${backLink('#inicio', 'Inicio')}
     ${roomHeading('INVITACIÓN A UNA CATA', room.title, canJoin ? 'Escribe tu nombre para unirte a la sala.' : 'La sala está completa o la cata ya ha empezado.')}
     ${canJoin ? `<form id="join-form" class="panel form-fields"><label>Tu nombre<input name="name" autocomplete="nickname" maxlength="32" value="${html(read('name', ''))}" required></label>
@@ -268,10 +251,10 @@ function lobby() {
   const full = room.people.length === room.size;
   return `<div class="content narrow page">
     ${backLink('#inicio', 'Inicio')}
-    ${roomHeading(room.demo ? 'CATA DE DEMOSTRACIÓN' : 'SALA DE ESPERA', room.title, room.demo
-      ? 'Hay cinco invitados simulados. Votarán cuando envíes tus elecciones.'
-      : room.host ? 'Comparte el enlace. Numerad las botellas tapadas y dejad las etiquetas para el final.' : 'La cata empezará cuando el anfitrión dé paso a la primera copa.')}
-    ${!room.demo ? `<div class="panel invite-panel"><div><span>Código de la sala</span><strong>${room.id.toUpperCase()}</strong></div>${button('Compartir enlace', 'share', 'link', 'secondary')}</div>` : ''}
+    ${roomHeading('SALA DE ESPERA', room.title, room.host
+      ? 'Comparte el enlace. Numerad las botellas tapadas y dejad las etiquetas para el final.'
+      : 'La cata empezará cuando el anfitrión dé paso a la primera copa.')}
+    <div class="panel invite-panel"><div><span>Código de la sala</span><strong>${room.id.toUpperCase()}</strong></div>${button('Compartir enlace', 'share', 'link', 'secondary')}</div>
     <section class="panel">
       <div class="panel-heading"><h2>Participantes</h2>${pill(`${room.people.length} / ${room.size}`, full ? 'success-pill' : '')}</div>
       ${roster(false)}
@@ -283,10 +266,10 @@ function lobby() {
 }
 
 function updateHistory() {
-  if (!room?.me || room.id === 'ejemplo') return;
-  const history = displayRooms(false).filter(item => item.id !== room.id);
-  const { id, title, theme, demo, wines, stage, size, created } = room;
-  save('history', [{ id, title, theme, demo, wines, stage, size, created }, ...history].sort((a, b) => b.created.localeCompare(a.created)));
+  if (!room?.me) return;
+  const history = displayRooms().filter(item => item.id !== room.id);
+  const { id, title, theme, wines, stage, size, created } = room;
+  save('history', [{ id, title, theme, wines, stage, size, created }, ...history].sort((a, b) => b.created.localeCompare(a.created)));
 }
 function blankDraft(id, count) {
   const saved = read('draft:' + id, {});
@@ -471,7 +454,7 @@ function roomPage() {
   if (!room) return `<div class="content narrow page">${backLink('#inicio', 'Inicio')}
     ${loadError ? `<h1>No se pudo abrir la sala</h1><p>${html(loadError)}</p>${button('Volver a intentar', 'retry', '', 'primary')}` : '<p class="loading" role="status">Abriendo la sala…</p>'}
   </div>`;
-  if (!room.me && room.id !== 'ejemplo') return joinPage();
+  if (!room.me) return joinPage();
   if (room.stage === 'lobby') return lobby();
   if (Array.isArray(room.order)) return subview === 'notes' ? notesPage() : results();
   if (room.myBallot) return waiting();
@@ -480,7 +463,7 @@ function roomPage() {
 function render({ focus = '', scroll = false } = {}) {
   shell.querySelector('.results-dialog[open]')?.close();
   const [page, id] = routes();
-  const inRoom = page === 'cata' || page === 'ejemplo';
+  const inRoom = page === 'cata';
   const imported = page === 'importada' ? findImported(id) : null;
   const theme = imported?.report.theme ?? (inRoom && room ? room.theme : page === 'nueva' ? form.theme : mode);
   setTheme(theme);
@@ -534,7 +517,6 @@ async function route() {
   subview = '';
   slide = 0;
   loadError = '';
-  if (page === 'ejemplo') room = sample;
   if (page === 'cata') {
     activeId = /^[a-f0-9]{12}$/.test(id ?? '') ? id : '';
     if (!activeId) loadError = 'El código de la cata no es válido.';
@@ -551,6 +533,7 @@ async function refresh(silent = true, initial = false) {
   try {
     const next = await api(id);
     if (id !== activeId || (silent && (pending || room !== current)) || JSON.stringify(next) === JSON.stringify(room)) return;
+    if (next.demo) { go('#inicio'); return; }
     const stageChanged = room && next.stage !== room.stage;
     const cupRevealed = room?.order?.[slide] === undefined && next.order?.[slide] !== undefined;
     if (silent && !stageChanged && !room?.me && document.activeElement?.matches('#join-form input')) return;
@@ -570,23 +553,16 @@ function busy(value) {
   pending = value;
   shell.querySelector('main')?.toggleAttribute('aria-busy', value);
 }
-async function create(demo) {
+async function create() {
   if (pending) return;
-  const definition = demo ? {
-    demo: true, title: 'Cata de demostración', name: read('name', '') || 'Tú',
-    theme: mode, size: 6, wines: mode === 'blanco'
-      ? ['Martín Códax Albariño', 'José Pariente Verdejo', 'Mar de Frades', 'Pazo de Señorans', 'O Luar do Sil', 'Terras Gauda']
-      : sample.wines.map(wine => wine.label),
-  } : form;
-  if (demo) demoId ||= newId();
-  else form.id ||= newId();
-  const id = demo ? demoId : form.id;
+  form.id ||= newId();
+  const id = form.id;
   const sourceRoute = location.hash;
   busy(true);
   try {
-    const created = await api(id, 'POST', 'create', definition);
-    if (!demo) { save('name', created.people[0].name); form = makeForm(); }
-    else demoId = '';
+    const created = await api(id, 'POST', 'create', form);
+    save('name', created.people[0].name);
+    form = makeForm();
     if (location.hash === sourceRoute) go('#cata/' + id);
   } catch (error) { announce(error.message); }
   finally { busy(false); }
@@ -777,7 +753,6 @@ shell.addEventListener('click', async event => {
       break;
     case 'new': form = makeForm(); go('#nueva'); break;
     case 'import-results': go('#importar'); break;
-    case 'demo': await create(true); break;
     case 'retry': await route(); break;
     case 'add-wine':
       form.wines.push('');
@@ -827,7 +802,7 @@ shell.addEventListener('input', event => {
 shell.addEventListener('submit', async event => {
   event.preventDefault();
   if (event.target.id === 'import-form') importTasting(event.target);
-  if (event.target.id === 'create-form') await create(false);
+  if (event.target.id === 'create-form') await create();
   if (event.target.id === 'join-form') await changeRoom('join', { name: new FormData(event.target).get('name') });
   if (event.target.id === 'reveal-form') {
     const wine = new FormData(event.target).get('wine');

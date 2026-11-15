@@ -101,7 +101,7 @@ main[aria-busy] { cursor: progress; }
 .hero h1 { font-size: clamp(75px, 9vw, 126px); line-height: .86; margin: 24px 0 24px; letter-spacing: -.035em; }
 .hero h1 em { color: var(--accent); font-weight: 400; }
 .hero p { max-width: 275px; color: var(--hero-text); line-height: 1.6; }
-.hero-actions { margin-top: 28px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.hero-actions { margin-top: 28px; }
 .photo-caption { position: absolute; right: 18px; bottom: 18px; display: flex; gap: 7px; align-items: center; color: var(--caption); border: 1px solid #fff4df55; border-radius: 999px; padding: 6px 10px; background: #28131a91; font-size: 9px; letter-spacing: .13em; font-weight: 700; }
 .photo-caption i { width: 6px; height: 6px; }
 .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 10px 17px; border: 1px solid transparent; border-radius: 12px; font-size: 13px; font-weight: 700; white-space: nowrap; transition: background-color .18s, transform .18s, border-color .18s; }
@@ -291,8 +291,8 @@ textarea { min-height: 105px; resize: vertical; }
   .hero h1 br { display: none; }
   .hero h1 em { display: block; }
   .hero p { font-size: 13px; max-width: 240px; }
-  .hero-actions { margin-top: 17px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px; }
-  .hero-actions .button { padding-inline: 7px; font-size: 12px; }
+  .hero-actions { margin-top: 17px; }
+  .hero-actions .button { width: 100%; }
   .photo-caption { top: 12px; right: 12px; bottom: auto; }
   .tastings { margin-top: 24px; }
   .section-heading { margin-bottom: 9px; }
